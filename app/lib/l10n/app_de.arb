@@ -2961,5 +2961,25 @@
     "description": "Section header for memory knowledge graph on home page"
   },
   "voiceMode": "Sprachmodus",
-  "quickActionAskOmi": "Frag Omi irgendetwas"
+  "quickActionAskOmi": "Frag Omi irgendetwas",
+  "record": "Aufnehmen",
+  "stop": "Stopp",
+  "recordWithPhoneMic": "Mit Telefonmikrofon aufnehmen",
+  "recordWithPhoneMicSubtitle": "Erfasse Audio in deiner Umgebung",
+  "phoneCall": "Anruf",
+  "phoneCallSubtitle": "Anruf mit Live-Transkription aufnehmen",
+  "bulkExportInProgress": "Exportieren…",
+  "bulkExportPartial": "{success} von {total} nach {platform} exportiert",
+  "bulkExportSuccess": "{count} nach {platform} exportiert",
+  "chooseExportDestination": "{count} Element(e) exportieren nach…",
+  "connectAction": "Verbinden",
+  "connectTaskAppToExport": "Verbinde eine Aufgaben-App in den Einstellungen zum Exportieren",
+  "deselectAllTasksMenu": "Alle abwählen",
+  "hideCompletedTasks": "Erledigte ausblenden",
+  "searchActionItems": "Aktionspunkte durchsuchen",
+  "selectActionItems": "Mehrere auswählen",
+  "selectAllTasksMenu": "Alle auswählen",
+  "showCompletedTasks": "Erledigte anzeigen",
+  "startCallRecording": "Anrufaufnahme starten",
+  "startVoiceRecording": "Sprachaufnahme starten"
 }

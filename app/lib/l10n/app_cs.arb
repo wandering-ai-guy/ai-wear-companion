@@ -2962,5 +2962,25 @@
     "description": "Section header for memory knowledge graph on home page"
   },
   "voiceMode": "Hlasový režim",
-  "quickActionAskOmi": "Zeptejte se Omi na cokoliv"
+  "quickActionAskOmi": "Zeptejte se Omi na cokoliv",
+  "record": "Nahrát",
+  "stop": "Zastavit",
+  "recordWithPhoneMic": "Nahrát mikrofonem telefonu",
+  "recordWithPhoneMicSubtitle": "Zaznamenávejte zvuk kolem vás",
+  "phoneCall": "Telefonní hovor",
+  "phoneCallSubtitle": "Nahrávejte hovor s živým přepisem",
+  "bulkExportInProgress": "Exportování…",
+  "bulkExportPartial": "Exportováno {success} z {total} do {platform}",
+  "bulkExportSuccess": "Exportováno {count} do {platform}",
+  "chooseExportDestination": "Exportovat {count} položek do…",
+  "connectAction": "Připojit",
+  "connectTaskAppToExport": "Pro export připojte aplikaci úkolů v Nastavení",
+  "deselectAllTasksMenu": "Zrušit výběr všech",
+  "hideCompletedTasks": "Skrýt dokončené",
+  "searchActionItems": "Hledat akční položky",
+  "selectActionItems": "Vybrat více",
+  "selectAllTasksMenu": "Vybrat vše",
+  "showCompletedTasks": "Zobrazit dokončené",
+  "startCallRecording": "Zahájit nahrávání hovoru",
+  "startVoiceRecording": "Zahájit hlasový záznam"
 }

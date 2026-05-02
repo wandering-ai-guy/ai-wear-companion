@@ -2993,5 +2993,25 @@
     "description": "Section header for memory knowledge graph on home page"
   },
   "voiceMode": "โหมดเสียง",
-  "quickActionAskOmi": "ถาม Omi สิ่งใดก็ได้"
+  "quickActionAskOmi": "ถาม Omi สิ่งใดก็ได้",
+  "record": "บันทึก",
+  "stop": "หยุด",
+  "recordWithPhoneMic": "บันทึกด้วยไมค์โทรศัพท์",
+  "recordWithPhoneMicSubtitle": "บันทึกเสียงรอบตัวคุณ",
+  "phoneCall": "การโทรศัพท์",
+  "phoneCallSubtitle": "บันทึกการโทรพร้อมถอดเสียงสด",
+  "bulkExportInProgress": "กำลังส่งออก…",
+  "bulkExportPartial": "ส่งออกแล้ว {success} จาก {total} ไปยัง {platform}",
+  "bulkExportSuccess": "ส่งออกแล้ว {count} ไปยัง {platform}",
+  "chooseExportDestination": "ส่งออก {count} รายการไปยัง…",
+  "connectAction": "เชื่อมต่อ",
+  "connectTaskAppToExport": "เชื่อมต่อแอปงานในการตั้งค่าเพื่อส่งออก",
+  "deselectAllTasksMenu": "ยกเลิกเลือกทั้งหมด",
+  "hideCompletedTasks": "ซ่อนที่เสร็จแล้ว",
+  "searchActionItems": "ค้นหารายการดำเนินการ",
+  "selectActionItems": "เลือกหลายรายการ",
+  "selectAllTasksMenu": "เลือกทั้งหมด",
+  "showCompletedTasks": "แสดงที่เสร็จแล้ว",
+  "startCallRecording": "เริ่มบันทึกการโทร",
+  "startVoiceRecording": "เริ่มบันทึกเสียง"
 }

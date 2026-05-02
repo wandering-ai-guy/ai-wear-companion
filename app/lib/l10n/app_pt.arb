@@ -3029,5 +3029,25 @@
     "description": "Section header for memory knowledge graph on home page"
   },
   "voiceMode": "Modo de voz",
-  "quickActionAskOmi": "Pergunte qualquer coisa ao Omi"
+  "quickActionAskOmi": "Pergunte qualquer coisa ao Omi",
+  "record": "Gravar",
+  "stop": "Parar",
+  "recordWithPhoneMic": "Gravar com o microfone do telefone",
+  "recordWithPhoneMicSubtitle": "Capture o áudio ao seu redor",
+  "phoneCall": "Chamada telefônica",
+  "phoneCallSubtitle": "Grave uma chamada com transcrição ao vivo",
+  "bulkExportInProgress": "Exportando…",
+  "bulkExportPartial": "Exportados {success} de {total} para {platform}",
+  "bulkExportSuccess": "Exportados {count} para {platform}",
+  "chooseExportDestination": "Exportar {count} item(ns) para…",
+  "connectAction": "Conectar",
+  "connectTaskAppToExport": "Conecte um aplicativo de tarefas nas Configurações para exportar",
+  "deselectAllTasksMenu": "Desmarcar todos",
+  "hideCompletedTasks": "Ocultar concluídas",
+  "searchActionItems": "Pesquisar itens de ação",
+  "selectActionItems": "Selecionar vários",
+  "selectAllTasksMenu": "Selecionar todos",
+  "showCompletedTasks": "Mostrar concluídas",
+  "startCallRecording": "Iniciar gravação de chamada",
+  "startVoiceRecording": "Iniciar gravação de voz"
 }

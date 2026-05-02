@@ -10701,5 +10701,25 @@
     "description": "Section header for memory knowledge graph on home page"
   },
   "voiceMode": "حالت صوتی",
-  "quickActionAskOmi": "از Omi هر چیزی بپرسید"
+  "quickActionAskOmi": "از Omi هر چیزی بپرسید",
+  "record": "ضبط",
+  "stop": "توقف",
+  "recordWithPhoneMic": "ضبط با میکروفون تلفن",
+  "recordWithPhoneMicSubtitle": "صدای اطراف خود را ضبط کنید",
+  "phoneCall": "تماس تلفنی",
+  "phoneCallSubtitle": "یک تماس را با رونویسی زنده ضبط کنید",
+  "bulkExportInProgress": "در حال صادرات…",
+  "bulkExportPartial": "{success} از {total} به {platform} صادر شد",
+  "bulkExportSuccess": "{count} به {platform} صادر شد",
+  "chooseExportDestination": "صادرات {count} مورد به…",
+  "connectAction": "اتصال",
+  "connectTaskAppToExport": "برای صادرات، یک برنامه وظایف را در تنظیمات متصل کنید",
+  "deselectAllTasksMenu": "لغو انتخاب همه",
+  "hideCompletedTasks": "پنهان کردن انجام‌شده‌ها",
+  "searchActionItems": "جستجوی موارد اقدام",
+  "selectActionItems": "انتخاب چندگانه",
+  "selectAllTasksMenu": "انتخاب همه",
+  "showCompletedTasks": "نمایش انجام‌شده‌ها",
+  "startCallRecording": "شروع ضبط تماس",
+  "startVoiceRecording": "شروع ضبط صدا"
 }
