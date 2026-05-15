@@ -53,12 +53,26 @@ done the previous ones.
 ## Conventions used in this manual
 
 - We use **Python 3.11** for the backend, **FastAPI** for the API framework,
-  and **Flutter 3.x** for the mobile app. These are not the only correct
+  **Google Gemini** as the default LLM and embedding provider, and
+  **Flutter 3.x** for the mobile app. These are not the only correct
   choices, but they match what works in production today, and they let you
   copy-and-adapt code from the Omi reference where helpful.
+- The manual assumes you're developing on **Windows 10 / 11** (Part 02 sets
+  up PowerShell + WSL 2). The backend, the Android app, deployment, and
+  every dev workflow run natively on Windows. The **iOS** build is the one
+  thing that requires macOS — and we cover how to do that entirely in the
+  cloud (Codemagic or a GitHub Actions `macos-latest` runner) so you never
+  need a physical Mac at your desk.
 - Code blocks that look like `# in path/to/file.py` mean: open that file in
   your editor and put the code there. We never expect you to memorize a long
   block — paste it, run it, then read it.
+- Shell snippets marked ```` ```powershell ```` are meant for **PowerShell
+  on Windows**. Snippets marked ```` ```bash ```` are meant either for
+  **WSL 2** or for **Linux CI** (e.g. GitHub Actions) — for most commands
+  (`gcloud …`, `git …`, `pip install …`, `flutter …`) the syntax is
+  identical and the snippet will work as-is in PowerShell too. When the
+  Windows version is meaningfully different, both flavors are shown
+  side-by-side.
 - Anywhere you see `<<YOUR_BRAND>>`, `<<YOUR_DOMAIN>>`, or similar in
   CAPS-WITH-UNDERSCORES, that is a value you fill in for your own product.
 - "Mildly technical" means: you should be able to read every command and

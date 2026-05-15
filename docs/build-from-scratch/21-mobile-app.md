@@ -8,20 +8,39 @@ This part is intentionally short relative to its size — the Flutter
 ecosystem is huge, and every screen is a sub-project. Treat this as
 the wiring guide; pick UI ergonomics yourself.
 
+> **Recap on iOS from Part 02.** On Windows, you can build, run, and
+> debug the **Android** version of the app to your heart's content
+> (USB cable + a real Pixel/Galaxy gets you a great dev loop, or use
+> the Android Emulator). The **iOS** build happens entirely in
+> the cloud — see section 12 below. Everything in sections 1–11
+> works the same on Windows as it does on Mac.
+
 ## 1. Create the project
 
-```bash
+In PowerShell at the repo root:
+
+```powershell
 cd <<YOUR_BRAND>>
-flutter create --org me.<<YOUR_BRAND>> \
-  --platforms=ios,android \
-  --description "<<YOUR_BRAND>> — your second brain" \
-  --project-name <<your_brand>>_app \
+flutter create --org me.<<YOUR_BRAND>> `
+  --platforms=ios,android `
+  --description "<<YOUR_BRAND>> — your second brain" `
+  --project-name <<your_brand>>_app `
   app
 ```
 
-(Flutter project names are snake_case and must start with a letter.)
+(Flutter project names are snake_case and must start with a letter.
+PowerShell uses backtick `` ` `` as the line-continuation character.)
 
-`cd app && flutter run` should boot the demo counter app.
+Then:
+
+```powershell
+cd app
+flutter run
+```
+
+That should boot the demo counter app on a connected Android device
+or emulator. If nothing's connected, run `flutter emulators` then
+`flutter emulators --launch <name>` first.
 
 ## 2. Brand the shell
 
@@ -75,12 +94,18 @@ flutter_native_splash:
   image: "../branding/<<YOUR_BRAND>>/mobile/splash.png"
 ```
 
-```bash
+```powershell
 cd app
 flutter pub get
 dart run flutter_launcher_icons
 dart run flutter_native_splash:create
 ```
+
+> The icon-generation command writes both Android *and* iOS assets.
+> Generating the iOS assets from Windows is fine — they're just PNGs
+> dropped into `app\ios\Runner\Assets.xcassets\AppIcon.appiconset\`.
+> They'll be picked up the next time a Mac (or a cloud CI Mac) builds
+> the iOS target.
 
 ## 3. Required dependencies
 
@@ -120,14 +145,29 @@ flutter pub get
 
 ## 4. Firebase setup for the app
 
-```bash
-cd app
+Install the FlutterFire CLI once (the package was already added by
+Flutter's setup, but if `flutterfire` isn't on your PATH):
+
+```powershell
+dart pub global activate flutterfire_cli
+# Make sure `$env:USERPROFILE\AppData\Local\Pub\Cache\bin` is on PATH.
+```
+
+Then, in `app\`:
+
+```powershell
 flutterfire configure --project=<<YOUR_GCP_PROJECT_ID>>
 ```
 
-This generates `lib/firebase_options.dart` and configures iOS +
-Android. Enable iOS push notifications in the Firebase Console
-(Cloud Messaging → APNs key).
+This generates `lib\firebase_options.dart` and writes
+`android\app\google-services.json` plus
+`ios\Runner\GoogleService-Info.plist`. The iOS plist will be used by
+your cloud iOS builder (section 12). Commit both platform configs so
+the CI builder has them.
+
+Enable iOS push notifications in the Firebase Console (Cloud
+Messaging → "Apple app configuration" → upload your APNs key). You
+do *not* need a Mac for that step — it's all in the web UI.
 
 ## 5. Project structure
 
@@ -324,8 +364,8 @@ in our reference repo's `app/CLAUDE.md` as a pattern.
 Use `flutter_flavorizr` or `--dart-define-from-file` to swap
 `BASE_API_URL`, `FIREBASE_PROJECT_ID`, app name, and icon per flavor:
 
-```bash
-flutter run --dart-define-from-file=env/dev.json
+```powershell
+flutter run --dart-define-from-file=env\dev.json
 ```
 
 Where `env/dev.json` is:
@@ -343,21 +383,115 @@ const baseUrl = String.fromEnvironment('BASE_API_URL');
 
 ## 12. Releasing
 
-The app stores process is its own beast. The minimum:
+The app stores process is its own beast. Two flavors on Windows:
 
-- iOS: configure signing in Xcode (Apple Developer account required),
-  `flutter build ipa`, upload via Xcode Organizer.
-- Android: generate a keystore once,
-  `flutter build appbundle --release`, upload to Play Console.
-- TestFlight + internal testing tracks first; production release
-  later.
+### Android (build & ship from your Windows laptop)
 
-For repeatability, use [Codemagic](https://codemagic.io/) or
-GitHub Actions with `subosito/flutter-action`.
+1. **Generate a keystore** once. In PowerShell:
+   ```powershell
+   $keytool = "$env:JAVA_HOME\bin\keytool.exe"
+   if (-not (Test-Path $keytool)) {
+     # Android Studio bundles its own JDK; use it.
+     $keytool = "${env:ProgramFiles}\Android\Android Studio\jbr\bin\keytool.exe"
+   }
+   & $keytool -genkey -v -keystore "$env:USERPROFILE\<<YOUR_BRAND>>-release.jks" `
+     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+   ```
+   Save the password and keystore file in 1Password. **If you lose
+   it, you can never publish another update under the same app**.
+2. Configure `app\android\key.properties` (gitignored):
+   ```
+   storePassword=<password>
+   keyPassword=<password>
+   keyAlias=upload
+   storeFile=C:\\Users\\<<YOU>>\\<<YOUR_BRAND>>-release.jks
+   ```
+   Edit `app\android\app\build.gradle` to read it (see the official
+   Flutter [Android signing] doc).
+3. Build:
+   ```powershell
+   cd app
+   flutter build appbundle --release `
+     --dart-define-from-file=env\prod.json
+   ```
+4. Upload the `.aab` file from
+   `app\build\app\outputs\bundle\release\app-release.aab` to
+   **Play Console → Production track** (or Internal testing while
+   you iterate).
+
+### iOS (build & ship from CI — you don't need a Mac)
+
+You have two well-trodden options. Pick one:
+
+**Option A: Codemagic (recommended for solo founders).**
+
+1. Sign up at <https://codemagic.io/> with your GitHub account.
+2. Add a `codemagic.yaml` at the repo root that points to `app/` and
+   targets iOS. Codemagic provides a copy-pasteable starter for
+   Flutter — accept it, then commit.
+3. In Codemagic UI → **Teams → Code signing identities**, upload
+   your Apple Developer certificate (`.p12`) and provisioning
+   profile, or let Codemagic auto-manage signing via API key.
+4. Push to `main`. Codemagic builds an `.ipa` on a real macOS runner
+   and uploads to TestFlight.
+
+**Option B: GitHub Actions with a `macos-latest` runner.**
+
+```yaml
+# .github/workflows/ios.yml
+name: ios
+on:
+  workflow_dispatch:
+  push: { tags: ['v*'] }
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable }
+      - run: flutter pub get
+        working-directory: app
+      - uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERT_P12_B64 }}
+          p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+      - uses: apple-actions/download-provisioning-profiles@v3
+        with:
+          bundle-id: me.<<YOUR_BRAND>>.app
+          issuer-id: ${{ secrets.APPLE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPLE_KEY_ID }}
+          api-private-key: ${{ secrets.APPLE_API_KEY }}
+      - run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+        working-directory: app
+      - uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: app/build/ios/ipa/<<your_brand>>_app.ipa
+          issuer-id: ${{ secrets.APPLE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPLE_KEY_ID }}
+          api-private-key: ${{ secrets.APPLE_API_KEY }}
+```
+
+You enroll in the **Apple Developer Program** ($99/year) on
+<https://developer.apple.com/>. From the Apple Developer UI you
+generate:
+
+- a **distribution certificate** (`.p12` + password — base64-encode
+  the `.p12` and store as the `APPLE_CERT_P12_B64` GitHub secret),
+- a **provisioning profile** for `me.<<YOUR_BRAND>>.app`,
+- an **App Store Connect API key** (issuer ID + key ID + private
+  key `.p8`).
+
+All of these are web forms; no Mac required. The first real Mac
+touchpoint is whoever logs into App Store Connect to fill the
+listing — that can be done from any browser on Windows.
+
+[Android signing]: https://docs.flutter.dev/deployment/android#signing-the-app
 
 ## 13. Commit
 
-```bash
+```powershell
 cd ..
 git add app branding
 git commit -m "feat(part-21): flutter app shell, branding, listen ws + auth"
@@ -373,6 +507,10 @@ git push
 - [ ] Live transcripts appear on screen.
 - [ ] FCM tokens registered with the backend.
 - [ ] App is theme'd, l10n-ready.
+- [ ] Android keystore exists, `flutter build appbundle --release`
+  produces a signed `.aab` on Windows.
+- [ ] An iOS build runs in CI (Codemagic or GitHub Actions) and
+  reaches TestFlight without ever booting a Mac at your desk.
 
 ---
 

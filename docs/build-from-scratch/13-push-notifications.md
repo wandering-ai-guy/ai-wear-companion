@@ -102,8 +102,21 @@ FCM bridges to APNs *for you*, but you still need to:
 2. In Firebase Console → Project Settings → Cloud Messaging → "Apple
    app configuration" → upload the `.p8`, plus your team ID and key
    ID.
-3. In your iOS app, add **Background Modes → Remote notifications**
-   in Xcode and request permission via `firebase_messaging`.
+3. Tell your iOS build to declare the **Remote Notifications**
+   background mode. On Windows you do this by editing
+   `app\ios\Runner\Info.plist` directly — add:
+   ```xml
+   <key>UIBackgroundModes</key>
+   <array>
+     <string>remote-notification</string>
+   </array>
+   ```
+   The next time your cloud CI (Part 21, section 12) builds the iOS
+   target, Xcode picks this up automatically. There is no need to
+   open Xcode on a Mac for this.
+4. Request permission at app launch via `firebase_messaging`'s
+   `requestPermission()` call (the Flutter side is identical on
+   Android and iOS).
 
 After that, FCM tokens from iOS work as transparently as Android.
 

@@ -1,6 +1,6 @@
 # Part 18 — Testing Strategy
 
-> Goal of this part: a `make test` that catches the mistakes you
+> Goal of this part: a `tools\test.ps1` (and CI equivalent) that catches the mistakes you
 > actually make, plus a CI workflow that runs it on every PR.
 
 ## 1. The pyramid you actually need
@@ -40,7 +40,29 @@ backend/tests/
     sample_conversation.json
 ```
 
-`backend/test.sh`:
+We keep **two** copies of each test runner — a PowerShell `.ps1`
+that you run on your Windows laptop, and a bash `.sh` that runs on
+the Linux GitHub Actions runner. Both must stay in sync.
+
+`backend\tools\test.ps1` (Windows, day-to-day):
+
+```powershell
+$ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot\..
+
+& ".\.venv\Scripts\Activate.ps1"
+$env:ENCRYPTION_SECRET = "test-secret-must-be-long-enough"
+$env:ADMIN_KEY = "testkey"
+$env:PYTHONPATH = (Get-Location).Path
+
+pytest -q tests\unit $args
+
+if ($env:RUN_INTEGRATION -eq "1") {
+    pytest -q tests\integration $args
+}
+```
+
+`backend/test.sh` (Linux CI, identical behavior):
 
 ```bash
 #!/usr/bin/env bash
@@ -52,16 +74,23 @@ export ENCRYPTION_SECRET="test-secret-must-be-long-enough"
 export ADMIN_KEY="testkey"
 export PYTHONPATH="$(pwd)"
 
-# Unit tests run anywhere
 pytest -q tests/unit "$@"
 
-# Integration tests skip if env not set
 if [[ "${RUN_INTEGRATION:-0}" == "1" ]]; then
   pytest -q tests/integration "$@"
 fi
 ```
 
-`backend/test-preflight.sh`:
+A matching preflight, `backend\tools\test-preflight.ps1`:
+
+```powershell
+$ErrorActionPreference = "Stop"
+python --version
+Get-Command pytest | Select-Object -ExpandProperty Source
+python -c "import importlib; [importlib.import_module(m) for m in ('fastapi','uvicorn','redis','pydantic','google.genai','deepgram','pinecone')]; print('ok')"
+```
+
+And its bash twin for CI:
 
 ```bash
 #!/usr/bin/env bash
@@ -137,19 +166,46 @@ already imported its own copy.
 
 ## 4. Integration tests with the Firestore emulator
 
-```bash
-# install
-gcloud components install cloud-firestore-emulator
+The emulator runs on the JVM. Install a JDK first:
 
-# run (in a separate terminal during tests)
+```powershell
+choco install -y temurin17
+java -version       # should print 17.x
+```
+
+Then add the emulator component to gcloud:
+
+```powershell
+gcloud components install cloud-firestore-emulator
+```
+
+> If `gcloud components install` errors with "You cannot perform
+> this action because the Cloud SDK component manager is disabled,"
+> the Chocolatey gcloud install pinned it that way. The workaround
+> is one line:
+> ```powershell
+> & "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd" `
+>   config set component_manager/disable_update_check false
+> & "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd" `
+>   components install cloud-firestore-emulator
+> ```
+
+Run the emulator in a dedicated PowerShell window:
+
+```powershell
 gcloud emulators firestore start --host-port=localhost:8181
 ```
 
-Set the env var so the SDK targets the emulator:
+Set the env var so the SDK targets the emulator (do this in the
+window that will run your tests, **not** the emulator window):
 
-```bash
-export FIRESTORE_EMULATOR_HOST=localhost:8181
+```powershell
+$env:FIRESTORE_EMULATOR_HOST = "localhost:8181"
 ```
+
+> `$env:FOO = "..."` only lives for the current shell. To make it
+> stick across reboots, use `[Environment]::SetEnvironmentVariable(
+> "FIRESTORE_EMULATOR_HOST", "localhost:8181", "User")`.
 
 Now `database._client.db` writes and reads from the emulator. Your
 tests can do:
@@ -166,8 +222,24 @@ def _emulator():
     yield
 ```
 
-For Redis, run a real local one (`brew services start redis`) and
-point `REDIS_DB_HOST=localhost`, `REDIS_DB_PORT=6379`.
+For Redis, you already installed it as a Windows service back in
+Part 02. Confirm it's running and point your tests at it:
+
+```powershell
+Get-Service Redis        # STATUS should be Running
+$env:REDIS_DB_HOST = "localhost"
+$env:REDIS_DB_PORT = "6379"
+$env:REDIS_DB_PASSWORD = ""
+```
+
+If the service isn't running, `Start-Service Redis`.
+
+> **Heavier alternative: run Redis from Docker.** If the Windows
+> service flakes (it occasionally does on power-loss reboots), this
+> single command gives you a clean Redis:
+> ```powershell
+> docker run -d --name redis-dev -p 6379:6379 redis:7-alpine
+> ```
 
 ## 5. WebSocket integration test
 
@@ -255,6 +327,27 @@ container or the emulator setup above. Skip them on PRs from forks
 
 ## 8. Smoke test against ngrok before release
 
+A PowerShell version, `scripts\smoke.ps1`:
+
+```powershell
+$ErrorActionPreference = "Stop"
+$BASE = if ($env:BASE_API_URL) { $env:BASE_API_URL } else { "http://localhost:8080" }
+$TOKEN = "$env:ADMIN_KEY" + "smoke_test_uid"
+$Headers = @{ Authorization = "Bearer $TOKEN" }
+
+Invoke-RestMethod "$BASE/v1/health" | Out-Null
+"OK health"
+
+Invoke-RestMethod "$BASE/v1/users/me" -Headers $Headers | Out-Null
+"OK /me"
+
+Invoke-RestMethod "$BASE/v1/chat/messages" -Method Post -Headers $Headers `
+  -ContentType "application/json" -Body '{"message":"hello"}' | Out-Null
+"OK /chat"
+```
+
+And the equivalent bash (for CI), `scripts/smoke.sh`:
+
 ```bash
 # in scripts/smoke.sh
 set -euo pipefail
@@ -273,7 +366,8 @@ curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: applicatio
 echo "✓ /chat"
 ```
 
-Run `bash scripts/smoke.sh` after every deploy.
+Run `.\scripts\smoke.ps1` after every deploy (or `bash
+scripts/smoke.sh` from WSL / CI).
 
 ## 9. Test data discipline
 
@@ -292,7 +386,7 @@ git push
 
 ## What you should have right now
 
-- [ ] `make test` runs unit tests in <30 seconds.
+- [ ] `.\tools\test.ps1` runs unit tests in <30 seconds.
 - [ ] At least 5 unit tests covering encryption, prompts, audio
   parsing, BLE header, redis lock.
 - [ ] An integration test that hits the Firestore emulator.

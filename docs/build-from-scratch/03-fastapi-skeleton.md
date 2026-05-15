@@ -7,16 +7,34 @@
 
 ## 1. Create the virtual environment
 
-```bash
+In **PowerShell**:
+
+```powershell
 cd backend
-python3.11 -m venv .venv
-source .venv/bin/activate
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -V    # → Python 3.11.x
 ```
 
-You'll do `source .venv/bin/activate` every time you open a new
-terminal. Tip: install [direnv](https://direnv.net/) and put
-`source .venv/bin/activate` in `.envrc` so it's automatic.
+The `py -3.11` launcher comes with the Chocolatey `python311`
+install and picks the right interpreter even if you also have a
+newer Python on your system. If `py` isn't on PATH, use
+`python -m venv .venv` after confirming `python --version` is 3.11.
+
+You'll do `.\.venv\Scripts\Activate.ps1` every time you open a new
+PowerShell window in this folder. Your prompt should now start with
+`(.venv)`.
+
+> **If activation fails with "running scripts is disabled"** —
+> you skipped the execution-policy step in Part 02. Run:
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+> ```
+> and try again.
+
+> **If you prefer `cmd.exe`** instead of PowerShell, the activation
+> command is `.\.venv\Scripts\activate.bat`. Everything else in
+> this manual is PowerShell.
 
 ## 2. Initial dependencies
 
@@ -36,8 +54,8 @@ sentry-sdk[fastapi]==2.18.0
 
 Install:
 
-```bash
-pip install --upgrade pip
+```powershell
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
@@ -75,10 +93,16 @@ ALLOWED_ORIGINS=*
 
 Then copy it to `.env` (this one is **gitignored**):
 
-```bash
-cp .env.template .env
-echo "ADMIN_KEY=$(openssl rand -hex 16)" >> .env
+```powershell
+Copy-Item .env.template .env
+# Generate a random ADMIN_KEY for local dev:
+$key = -join ((1..32) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+Add-Content .env "ADMIN_KEY=$key"
 ```
+
+(Or, if you'd rather use OpenSSL: `openssl rand -hex 16 | Out-File
+-Encoding ASCII -Append .env` — but `Add-Content` is fewer surprises
+on Windows because it doesn't add a BOM.)
 
 In `backend/.gitignore` (create or append):
 
@@ -280,24 +304,36 @@ def root():
 
 ## 8. Run it
 
-```bash
+With the venv active:
+
+```powershell
 cd backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8080 --env-file .env
 ```
 
-In a second terminal:
+In a **second** PowerShell window:
 
-```bash
+```powershell
 http :8080/v1/health
-# or
-curl localhost:8080/v1/health | jq
+# or, using the curl shipped with Windows 10+ (it's really curl.exe):
+curl.exe http://localhost:8080/v1/health
 ```
+
+> **Heads-up:** in PowerShell, the alias `curl` points to
+> `Invoke-WebRequest`, which is *not* curl-compatible and prints a
+> different object shape. Always type `curl.exe` (or use `http` from
+> `httpie`) when you mean the real curl.
 
 You should see:
 
 ```json
 {"status": "ok", "env": "development", "version": "0.0.1"}
 ```
+
+If Windows Defender Firewall asks "Allow Python to communicate on
+networks?" — say yes for **Private networks** only. The public-
+internet exposure happens through ngrok, not through your laptop's
+IP directly.
 
 Open <http://localhost:8080/docs> in a browser to see the auto-generated
 Swagger UI. This is the cheapest, best onboarding gift you can give to
@@ -308,15 +344,17 @@ yourself and any future collaborator.
 The mobile app, Stripe webhooks, and OAuth callbacks all need a public
 HTTPS URL. We'll use **ngrok** for development.
 
-```bash
-brew install ngrok/ngrok/ngrok
+Install via Chocolatey, then add your auth token:
+
+```powershell
+choco install -y ngrok
 ngrok config add-authtoken <YOUR_NGROK_TOKEN>
 ```
 
 In your ngrok dashboard, claim a **static domain** (free tier gives
-you one). Then run:
+you one). Then in a third PowerShell window run:
 
-```bash
+```powershell
 ngrok http --domain=<<YOUR_BRAND>>-dev.ngrok-free.app 8080
 ```
 
@@ -328,48 +366,78 @@ the internet. Save that URL in `.env`:
 BASE_API_URL=https://<<YOUR_BRAND>>-dev.ngrok-free.app
 ```
 
-## 10. Add a Makefile (or `justfile`) for common chores
+## 10. Add per-task helper scripts (PowerShell)
 
-Create `backend/Makefile`:
+`make` doesn't ship with Windows, and chasing a working `mingw32-make`
+is more pain than it's worth. We'll use `.ps1` scripts in `backend/`
+that wrap the common chores. Each one expects you to have already
+activated the venv.
 
-```makefile
-.PHONY: install run lint format test
+`backend\tools\install.ps1`:
 
-install:
-	python3.11 -m venv .venv
-	. .venv/bin/activate && pip install -U pip && pip install -r requirements.txt
-
-run:
-	. .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8080 --env-file .env
-
-format:
-	. .venv/bin/activate && black --line-length 120 --skip-string-normalization .
-
-lint:
-	. .venv/bin/activate && python -m pyflakes .
-
-test:
-	. .venv/bin/activate && pytest -q
+```powershell
+$ErrorActionPreference = "Stop"
+py -3.11 -m venv .venv
+& ".\.venv\Scripts\Activate.ps1"
+python -m pip install -U pip
+pip install -r requirements.txt
 ```
 
-So that from now on, `make run`, `make format`, `make test`.
+`backend\tools\run.ps1`:
+
+```powershell
+$ErrorActionPreference = "Stop"
+& ".\.venv\Scripts\Activate.ps1"
+uvicorn main:app --reload --host 0.0.0.0 --port 8080 --env-file .env
+```
+
+`backend\tools\format.ps1`:
+
+```powershell
+$ErrorActionPreference = "Stop"
+& ".\.venv\Scripts\Activate.ps1"
+black --line-length 120 --skip-string-normalization .
+```
+
+`backend\tools\test.ps1`:
+
+```powershell
+$ErrorActionPreference = "Stop"
+& ".\.venv\Scripts\Activate.ps1"
+pytest -q
+```
+
+Usage (from `backend/`):
+
+```powershell
+.\tools\run.ps1
+.\tools\format.ps1
+.\tools\test.ps1
+```
+
+> **If you really want `make`:** install [GNU Make for Windows] via
+> `choco install make`, then write the equivalent Makefile using
+> `.venv\Scripts\activate.bat &&` instead of `source .venv/bin/activate`.
+> Most engineers find the `.ps1` flavor easier to read.
+
+[GNU Make for Windows]: https://community.chocolatey.org/packages/make
 
 ## 11. Commit
 
-```bash
-git add backend/ scripts/ .vscode/
+```powershell
+git add backend\ scripts\ .vscode\
 git commit -m "feat(part-03): fastapi skeleton with health endpoint"
 git push
 ```
 
 ## What you should have right now
 
-- [ ] `python3.11`, all deps installed in a `.venv`.
+- [ ] Python 3.11 venv at `backend\.venv`, activated in your shell.
 - [ ] `uvicorn main:app --reload` starts cleanly.
 - [ ] `GET /v1/health` returns 200 with JSON.
 - [ ] `/docs` page works.
 - [ ] ngrok forwards a public HTTPS URL to your laptop.
-- [ ] `make run`, `make format` work.
+- [ ] `.\tools\run.ps1`, `.\tools\format.ps1` work.
 
 You now have a real backend. Everything else in this manual just adds
 routers, utilities, and dependencies to this skeleton.
