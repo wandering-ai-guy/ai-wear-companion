@@ -145,37 +145,67 @@ async def watchdog():
 
 ## 6. The LLM client wrapper
 
+We're using **Google Gemini** as the default LLM. Two models will cover
+the manual end to end:
+
+| Model | When we use it |
+|-------|----------------|
+| `gemini-2.5-flash` | Post-processing, memory extraction, tool dispatch, light chat. Cheap & fast. |
+| `gemini-2.5-pro` | Final chat answers when reasoning matters (Part 11). |
+
 Append to `requirements.txt`:
 
 ```
-openai==1.104.2
-anthropic>=0.52.0
-tiktoken==0.7.0
+google-genai==1.5.0
 ```
+
+(The official Google GenAI Python SDK — not the old `google-generativeai`
+package; that one is being deprecated in favor of `google-genai`.)
 
 Create `backend/utils/llm/clients.py`:
 
 ```python
 # in backend/utils/llm/clients.py
 import logging
-from typing import Optional
+from functools import lru_cache
 
-import anthropic
-import openai
+from google import genai
+from google.genai import types as genai_types
 
 from utils.settings import get_settings
 
 log = logging.getLogger(__name__)
 
+# Default models — override per-call if you need a bigger one.
+FAST_MODEL = "gemini-2.5-flash"
+PRO_MODEL = "gemini-2.5-pro"
+EMBEDDING_MODEL = "text-embedding-004"  # 768 dims
 
-def openai_client() -> openai.AsyncOpenAI:
-    return openai.AsyncOpenAI(api_key=get_settings().openai_api_key)
+
+@lru_cache(maxsize=1)
+def gemini_client() -> genai.Client:
+    key = get_settings().gemini_api_key
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY missing")
+    return genai.Client(api_key=key)
 
 
-def anthropic_client() -> Optional[anthropic.AsyncAnthropic]:
-    key = __import__("os").environ.get("ANTHROPIC_API_KEY", "")
-    return anthropic.AsyncAnthropic(api_key=key) if key else None
+# Re-export so call sites don't import google.genai directly.
+GenerationConfig = genai_types.GenerateContentConfig
+Tool = genai_types.Tool
+FunctionDeclaration = genai_types.FunctionDeclaration
+Schema = genai_types.Schema
+Type = genai_types.Type
 ```
+
+We're caching the client because creating it is cheap but
+re-instantiating it on every call would burn TLS handshakes.
+
+> **Optional fallback to Anthropic / OpenAI.** Keep the wrapper thin
+> on purpose. If you ever want to swap, add `anthropic_client()` and
+> `openai_client()` next to `gemini_client()`, and route based on a
+> `LLM_PROVIDER` env var. Until then, every call site below imports
+> `gemini_client()` directly.
 
 Create `backend/utils/llm/post_process.py`:
 
@@ -188,7 +218,11 @@ from typing import List
 from database.conversations import mark_status, patch
 from database.segments import list_segments
 from models.segment import TranscriptSegment
-from utils.llm.clients import openai_client
+from utils.llm.clients import (
+    FAST_MODEL,
+    GenerationConfig,
+    gemini_client,
+)
 
 log = logging.getLogger(__name__)
 
@@ -220,18 +254,23 @@ async def post_process_conversation(uid: str, cid: str) -> None:
             return
 
         transcript = _format(segs)
-        client = openai_client()
+        client = gemini_client()
 
-        rsp = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": _PROMPT},
-                {"role": "user", "content": transcript[:18000]},
-            ],
+        # Gemini supports JSON-mode via response_mime_type + response_schema.
+        # response_schema can be a JSON Schema dict OR a Pydantic model.
+        config = GenerationConfig(
+            system_instruction=_PROMPT,
             temperature=0.2,
+            response_mime_type="application/json",
         )
-        data = json.loads(rsp.choices[0].message.content or "{}")
+
+        # google-genai's blocking client has an async wrapper at .aio
+        rsp = await client.aio.models.generate_content(
+            model=FAST_MODEL,
+            contents=transcript[:18000],
+            config=config,
+        )
+        data = json.loads(rsp.text or "{}")
 
         patch(uid, cid, {
             "title": data.get("title") or None,
@@ -249,6 +288,12 @@ async def post_process_conversation(uid: str, cid: str) -> None:
         log.exception("post_process failed")
         mark_status(uid, cid, "failed")
 ```
+
+> **JSON mode gotcha.** Gemini's JSON mode is reliable for shallow
+> schemas. If you find it returning malformed JSON for nested
+> structures, wrap the call in a small retry that re-prompts with the
+> previous bad output appended ("the JSON above was invalid, return
+> valid JSON only"). Two retries is plenty.
 
 We import action-items + memories extractors that we'll fill in
 during Parts 10 and 12. For now, stub them so the code runs:
@@ -353,8 +398,8 @@ def merge(cid: str, other_cid: str, uid: str = Depends(get_current_user_uid)):
 
 ## 9. Cost guardrails
 
-GPT-4o-mini is cheap (~$0.15 / M input tokens), but a 2-hour
-conversation at 100 wpm ≈ 12K tokens. Multiply by users and that adds
+`gemini-2.5-flash` is cheap (well under $1 / M input tokens at the
+time of writing), but a 2-hour conversation at 100 wpm ≈ 12K tokens. Multiply by users and that adds
 up. Practical caps:
 
 - Truncate transcript to 18 000 chars before sending to LLM.

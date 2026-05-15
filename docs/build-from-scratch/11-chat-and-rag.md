@@ -5,10 +5,11 @@
 > tools that read the user's conversations, memories, and action
 > items.
 
-The reference Omi backend uses Anthropic's tool-using API for this.
-You can use OpenAI's function calling or Anthropic tools — the
-shape is similar. We'll show OpenAI here to keep it simple, then note
-how to swap to Anthropic.
+We use **Gemini's function-calling API** for this. Gemini, OpenAI,
+and Anthropic all expose the same conceptual pattern (declare tools
+→ model emits tool calls → you execute them → feed results back),
+and the chat loop below is small enough that you can swap providers
+later if you ever need to.
 
 ## 1. Chat data model
 
@@ -111,18 +112,20 @@ from typing import List
 
 from database import vector_db
 from utils.embeddings import embed
+from utils.llm.clients import FunctionDeclaration, Schema, Tool, Type
 
 log = logging.getLogger(__name__)
 
 
 async def search_memories(uid: str, query: str, k: int = 5) -> List[dict]:
-    [vec] = await embed([query])
+    # Use RETRIEVAL_QUERY task type when embedding a search query.
+    [vec] = await embed([query], task_type="RETRIEVAL_QUERY")
     rows = vector_db.query(uid, vec, top_k=k, flt={"kind": "memory"})
     return [{"id": rid, "score": score, **(meta or {})} for rid, score, meta in rows]
 
 
 async def search_conversations(uid: str, query: str, k: int = 5) -> List[dict]:
-    [vec] = await embed([query])
+    [vec] = await embed([query], task_type="RETRIEVAL_QUERY")
     rows = vector_db.query(uid, vec, top_k=k, flt={"kind": "conversation"})
     return [{"id": rid, "score": score, **(meta or {})} for rid, score, meta in rows]
 
@@ -131,50 +134,46 @@ async def list_action_items(uid: str, only_open: bool = True) -> List[dict]:
     return []  # filled in Part 12
 
 
-TOOL_SPEC = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_memories",
-            "description": "Semantic search over the user's long-term memories.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "k": {"type": "integer", "default": 5},
+# Gemini tool declarations. The schema uses google.genai types — these
+# are typed wrappers around the same JSON-Schema dialect, with `type`
+# as an enum (Type.STRING / Type.INTEGER / …).
+TOOLS = [
+    Tool(function_declarations=[
+        FunctionDeclaration(
+            name="search_memories",
+            description="Semantic search over the user's long-term memories.",
+            parameters=Schema(
+                type=Type.OBJECT,
+                properties={
+                    "query": Schema(type=Type.STRING),
+                    "k": Schema(type=Type.INTEGER),
                 },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_conversations",
-            "description": "Find conversations relevant to a topic.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "k": {"type": "integer", "default": 5},
+                required=["query"],
+            ),
+        ),
+        FunctionDeclaration(
+            name="search_conversations",
+            description="Find conversations relevant to a topic.",
+            parameters=Schema(
+                type=Type.OBJECT,
+                properties={
+                    "query": Schema(type=Type.STRING),
+                    "k": Schema(type=Type.INTEGER),
                 },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_action_items",
-            "description": "Returns the user's open tasks.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "only_open": {"type": "boolean", "default": True},
+                required=["query"],
+            ),
+        ),
+        FunctionDeclaration(
+            name="list_action_items",
+            description="Returns the user's open tasks.",
+            parameters=Schema(
+                type=Type.OBJECT,
+                properties={
+                    "only_open": Schema(type=Type.BOOLEAN),
                 },
-            },
-        },
-    },
+            ),
+        ),
+    ]),
 ]
 
 
@@ -190,13 +189,19 @@ async def dispatch(uid: str, name: str, args: dict) -> dict:
 
 ## 4. Chat orchestration loop
 
+Gemini's chat API uses **`Content` parts** instead of OpenAI-style
+message lists. Each turn is a `Content(role=..., parts=[...])` where
+parts can be text, a `function_call`, or a `function_response`.
+
 ```python
 # in backend/utils/chat/orchestrator.py
-import json
 import logging
+from typing import List
 
-from utils.chat.tools import TOOL_SPEC, dispatch
-from utils.llm.clients import openai_client
+from google.genai import types as gt
+
+from utils.chat.tools import TOOLS, dispatch
+from utils.llm.clients import PRO_MODEL, GenerationConfig, gemini_client
 
 log = logging.getLogger(__name__)
 
@@ -206,45 +211,68 @@ Be concise (≤180 words unless the user asks for more). Never invent facts not 
 If you don't have evidence, say so honestly."""
 
 
+def _history_to_contents(history: list[dict]) -> List[gt.Content]:
+    """Convert a [{role, content}] list to Gemini Content turns.
+    Gemini uses 'user' and 'model' (not 'assistant')."""
+    out: List[gt.Content] = []
+    for m in history:
+        role = "model" if m["role"] == "assistant" else "user"
+        out.append(gt.Content(role=role, parts=[gt.Part.from_text(m["content"])]))
+    return out
+
+
 async def chat(uid: str, history: list[dict], user_message: str) -> str:
     """Returns the assistant's final reply text."""
-    msgs = [{"role": "system", "content": SYSTEM}]
-    msgs.extend(history)
-    msgs.append({"role": "user", "content": user_message})
+    contents = _history_to_contents(history)
+    contents.append(gt.Content(role="user", parts=[gt.Part.from_text(user_message)]))
 
-    client = openai_client()
+    config = GenerationConfig(
+        system_instruction=SYSTEM,
+        temperature=0.3,
+        tools=TOOLS,
+        # Gemini will call tools automatically unless told otherwise.
+        # AUTO = the model decides. Use ANY to force a function call.
+        tool_config=gt.ToolConfig(
+            function_calling_config=gt.FunctionCallingConfig(mode="AUTO"),
+        ),
+    )
+
+    client = gemini_client()
     for hop in range(4):  # cap tool-use loops
-        rsp = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=msgs,
-            tools=TOOL_SPEC,
-            tool_choice="auto",
-            temperature=0.3,
+        rsp = await client.aio.models.generate_content(
+            model=PRO_MODEL,
+            contents=contents,
+            config=config,
         )
-        choice = rsp.choices[0]
-        if not choice.message.tool_calls:
-            return choice.message.content or ""
+        candidate = rsp.candidates[0]
+        parts = candidate.content.parts or []
 
-        msgs.append({
-            "role": "assistant",
-            "content": choice.message.content or "",
-            "tool_calls": [tc.model_dump() for tc in choice.message.tool_calls],
-        })
+        # Collect any function_call parts; if there are none, we're done.
+        fn_calls = [p.function_call for p in parts if getattr(p, "function_call", None)]
+        if not fn_calls:
+            # Concatenate any text parts the model produced.
+            return "".join(getattr(p, "text", "") or "" for p in parts)
 
-        for tc in choice.message.tool_calls:
-            try:
-                args = json.loads(tc.function.arguments or "{}")
-            except Exception:
-                args = {}
-            result = await dispatch(uid, tc.function.name, args)
-            msgs.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": json.dumps(result)[:8000],
-            })
+        # Append the model turn to history so the next call sees its own calls.
+        contents.append(candidate.content)
+
+        # Run each tool and append a function_response part per call.
+        response_parts: List[gt.Part] = []
+        for call in fn_calls:
+            args = dict(call.args or {})
+            result = await dispatch(uid, call.name, args)
+            response_parts.append(
+                gt.Part.from_function_response(name=call.name, response=result)
+            )
+        contents.append(gt.Content(role="user", parts=response_parts))
 
     return "I had to give up after a few attempts to look this up."
 ```
+
+The shape is the same as the OpenAI loop — call → maybe tool calls →
+run tools → call again with results — but the wire format is
+Gemini's. We use `gemini-2.5-pro` here (better reasoning); swap to
+`FAST_MODEL` if cost matters more than answer quality.
 
 ## 5. Chat router
 
@@ -321,30 +349,29 @@ async def send_stream(
     return StreamingResponse(gen(), media_type="text/event-stream")
 ```
 
-True token-by-token streaming uses `client.chat.completions.create(stream=True)`
-and proxies deltas. Same idea, more wire shenanigans. Don't bother
-until v2.
+True token-by-token streaming uses Gemini's
+`client.aio.models.generate_content_stream(...)` and proxies deltas.
+Same idea, more wire shenanigans. Don't bother until v2.
 
-## 7. Anthropic alternative
+## 7. Anthropic / OpenAI alternative
 
-Swap `openai_client().chat.completions.create(...)` with:
+The orchestrator is intentionally thin so you can swap providers if
+Gemini ever lets you down. Two real-world patterns:
 
-```python
-from utils.llm.clients import anthropic_client
-client = anthropic_client()
-rsp = await client.messages.create(
-    model="claude-sonnet-4-5",
-    max_tokens=1024,
-    system=SYSTEM,
-    messages=[...],
-    tools=[...],   # Anthropic tool spec is slightly different
-)
-```
+- **Anthropic Claude.** Add `anthropic_client()` in
+  `utils/llm/clients.py`, then in the chat loop call
+  `client.messages.create(model="claude-sonnet-4-5", system=SYSTEM,
+  messages=[...], tools=[...])`. Anthropic's tool spec uses
+  `input_schema` instead of `parameters`; the dispatch logic is
+  otherwise identical.
+- **OpenAI GPT-4o / o4-mini.** Add `openai_client()` and call
+  `client.chat.completions.create(model=..., messages=..., tools=...,
+  tool_choice="auto")`. Each tool call comes back as
+  `choice.message.tool_calls[i].function.{name, arguments}`.
 
-Anthropic's tool spec uses `input_schema` instead of OpenAI's
-`parameters`. The reference repo's `utils/retrieval/` shows an
-in-production Anthropic agentic loop with 18+ tools — read it once
-when you're ready for that.
+The reference repo's `utils/retrieval/` shows an in-production
+Anthropic agentic loop with 18+ tools — read it once when you're
+ready to scale this up.
 
 ## 8. Test it
 

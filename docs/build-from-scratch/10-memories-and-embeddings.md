@@ -23,15 +23,20 @@ In your Pinecone console:
 
 - Create a **serverless index**:
   - Name: `<<YOUR_BRAND>>-memories`
-  - Dimension: **1536** (matches OpenAI `text-embedding-3-small`)
+  - Dimension: **768** (matches Gemini `text-embedding-004`)
   - Metric: `cosine`
   - Cloud: AWS, Region: us-east-1 (or whichever is closest)
+
+> Pinecone index dimensions are **immutable** — if you create at 1536
+> and later switch embedding models, you have to create a fresh index
+> and re-embed. Pick the dimension that matches your default model.
+> If you later try Gemini's experimental `gemini-embedding-001`
+> (3072 dims), that's a new index, not a column.
 
 Append to `requirements.txt`:
 
 ```
 pinecone==7.3.0
-langchain-openai==0.3.35
 ```
 
 Update `.env`:
@@ -68,7 +73,7 @@ def _ensure_index():
     name = s.pinecone_index_name
     if name not in [i.name for i in _pc.list_indexes()]:
         _pc.create_index(
-            name=name, dimension=1536, metric="cosine",
+            name=name, dimension=768, metric="cosine",
             spec=ServerlessSpec(cloud="aws", region="us-east-1"),
         )
     _index = _pc.Index(name)
@@ -110,19 +115,45 @@ back another user's vectors.
 
 ## 4. Embedding helper
 
+Gemini embeddings come from the same `google-genai` SDK we already
+added in Part 09.
+
 ```python
 # in backend/utils/embeddings.py
-from typing import List
+from typing import List, Literal
 
-from utils.llm.clients import openai_client
+from google.genai import types as genai_types
+
+from utils.llm.clients import EMBEDDING_MODEL, gemini_client
 
 
-async def embed(texts: List[str], model: str = "text-embedding-3-small") -> List[List[float]]:
+# Gemini supports task-specific embedding for better retrieval quality.
+# Pass "RETRIEVAL_DOCUMENT" when *indexing* and "RETRIEVAL_QUERY" when
+# *searching*. Same vector space; just better aligned scores.
+TaskType = Literal["RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY", "SEMANTIC_SIMILARITY"]
+
+
+async def embed(
+    texts: List[str],
+    task_type: TaskType = "RETRIEVAL_DOCUMENT",
+    model: str = EMBEDDING_MODEL,
+) -> List[List[float]]:
     if not texts:
         return []
-    rsp = await openai_client().embeddings.create(model=model, input=texts)
-    return [d.embedding for d in rsp.data]
+    client = gemini_client()
+    rsp = await client.aio.models.embed_content(
+        model=model,
+        contents=texts,
+        config=genai_types.EmbedContentConfig(task_type=task_type),
+    )
+    # rsp.embeddings is a list of ContentEmbedding; .values is the float list.
+    return [e.values for e in rsp.embeddings]
 ```
+
+When you embed *for storage* (memories, conversation summaries), use
+the default `RETRIEVAL_DOCUMENT`. When you embed *a chat question*
+just before querying Pinecone, pass `task_type="RETRIEVAL_QUERY"`.
+We'll show that in Part 11.
 
 ## 5. Memory model + database
 
@@ -197,7 +228,7 @@ from database.memories import add as add_memory
 from database import vector_db
 from models.memory import Memory
 from utils.embeddings import embed
-from utils.llm.clients import openai_client
+from utils.llm.clients import FAST_MODEL, GenerationConfig, gemini_client
 
 log = logging.getLogger(__name__)
 
@@ -214,16 +245,16 @@ async def extract_memories(uid: str, cid: str, transcript: str) -> None:
     if not transcript or len(transcript) < 200:
         return
 
-    rsp = await openai_client().chat.completions.create(
-        model="gpt-4o-mini",
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": _PROMPT},
-            {"role": "user", "content": transcript[:18000]},
-        ],
-        temperature=0.1,
+    rsp = await gemini_client().aio.models.generate_content(
+        model=FAST_MODEL,
+        contents=transcript[:18000],
+        config=GenerationConfig(
+            system_instruction=_PROMPT,
+            temperature=0.1,
+            response_mime_type="application/json",
+        ),
     )
-    payload = json.loads(rsp.choices[0].message.content or '{"memories": []}')
+    payload = json.loads(rsp.text or '{"memories": []}')
     items = payload.get("memories", []) or []
     if not items:
         return

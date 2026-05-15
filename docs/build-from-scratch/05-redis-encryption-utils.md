@@ -187,7 +187,7 @@ that in Part 17.
 
 ## 3. The shared async HTTP client
 
-Many services we'll integrate (Deepgram, Pinecone, OpenAI's webhook
+Many services we'll integrate (Deepgram, Pinecone, Gemini's webhook
 clients, your own webhooks) need an `httpx.AsyncClient`. Creating one
 per request is wasteful — we want a shared, pooled, semaphore-bounded
 client.

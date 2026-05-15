@@ -70,7 +70,7 @@ python -V
 which pytest
 python - <<'PY'
 import importlib
-for m in ("fastapi", "uvicorn", "redis", "pydantic", "openai", "deepgram", "pinecone"):
+for m in ("fastapi", "uvicorn", "redis", "pydantic", "google.genai", "deepgram", "pinecone"):
     importlib.import_module(m)
 print("ok")
 PY
@@ -80,29 +80,40 @@ PY
 
 ### Pre-mock heavy deps
 
-`utils.llm.clients.openai_client()` lazily creates a real client
+`utils.llm.clients.gemini_client()` lazily creates a real client
 when called. In tests, patch it before importing the module under
 test:
 
 ```python
 # in tests/unit/test_post_process.py
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 
 @pytest.fixture
-def fake_openai(monkeypatch):
-    rsp = AsyncMock()
-    rsp.choices = [type("C", (), {"message": type("M", (), {"content": '{"title":"t","summary":"s","category":"work","action_items":[],"language":"en"}'})()})()]
-    client = AsyncMock()
-    client.chat.completions.create = AsyncMock(return_value=rsp)
-    with patch("utils.llm.post_process.openai_client", return_value=client):
+def fake_gemini():
+    # Gemini's async API returns an object whose .text is a JSON string.
+    rsp = SimpleNamespace(
+        text='{"title":"t","summary":"s","category":"work","action_items":[],"language":"en"}'
+    )
+    client = SimpleNamespace(
+        aio=SimpleNamespace(
+            models=SimpleNamespace(
+                generate_content=AsyncMock(return_value=rsp),
+                embed_content=AsyncMock(return_value=SimpleNamespace(
+                    embeddings=[SimpleNamespace(values=[0.0] * 768)],
+                )),
+            )
+        )
+    )
+    with patch("utils.llm.post_process.gemini_client", return_value=client):
         yield client
 
 
 @pytest.mark.asyncio
-async def test_post_process_writes_title(fake_openai, monkeypatch):
+async def test_post_process_writes_title(fake_gemini, monkeypatch):
     from utils.llm import post_process
     seen = {}
     monkeypatch.setattr(post_process, "list_segments", lambda u, c: [type("S", (), {
@@ -199,8 +210,8 @@ fixture-loaded stub:
 | Real | Stub returns |
 |------|--------------|
 | Deepgram WS | a canned sequence of partial/final transcripts |
-| OpenAI chat | the literal text in `tests/fixtures/llm_<name>.txt` |
-| OpenAI embedding | a deterministic vector from `hashlib.sha256(text).digest()` |
+| Gemini `generate_content` | the literal text in `tests/fixtures/llm_<name>.txt` |
+| Gemini `embed_content` | a deterministic 768-d vector from `hashlib.sha256(text).digest()` |
 | Pinecone | an in-memory dict |
 | FCM | a no-op |
 

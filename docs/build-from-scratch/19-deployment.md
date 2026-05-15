@@ -75,7 +75,7 @@ Cloud Run UI. Use Secret Manager.
 gcloud services enable secretmanager.googleapis.com
 
 # Create one secret per value
-echo -n "$OPENAI_API_KEY" | gcloud secrets create OPENAI_API_KEY --data-file=-
+echo -n "$GEMINI_API_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
 echo -n "$DEEPGRAM_API_KEY" | gcloud secrets create DEEPGRAM_API_KEY --data-file=-
 # … etc for every var in .env
 
@@ -88,7 +88,7 @@ done < .env.production
 
 # Allow the Cloud Run service account to read them:
 SA="$(gcloud iam service-accounts list --filter="displayName:Default compute service account" --format='value(email)')"
-for s in OPENAI_API_KEY DEEPGRAM_API_KEY PINECONE_API_KEY ENCRYPTION_SECRET REDIS_DB_PASSWORD ; do
+for s in GEMINI_API_KEY DEEPGRAM_API_KEY PINECONE_API_KEY ENCRYPTION_SECRET REDIS_DB_PASSWORD ; do
   gcloud secrets add-iam-policy-binding "$s" \
     --member="serviceAccount:$SA" --role="roles/secretmanager.secretAccessor"
 done
@@ -109,7 +109,7 @@ gcloud run deploy <<YOUR_BRAND>>-api \
   --session-affinity \
   --service-account="$SA" \
   --set-env-vars=ENV=production,LOG_LEVEL=INFO,GCP_PROJECT_ID=<<YOUR_GCP_PROJECT_ID>> \
-  --set-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest,\
+  --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,\
 DEEPGRAM_API_KEY=DEEPGRAM_API_KEY:latest,\
 PINECONE_API_KEY=PINECONE_API_KEY:latest,\
 ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest,\

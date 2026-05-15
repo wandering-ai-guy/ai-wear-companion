@@ -21,7 +21,7 @@ Print this. Tick boxes only when you've personally verified.
 - [ ] All sensitive Firestore fields are stored encrypted (`*_enc`).
 - [ ] Pinecone metadata contains no plaintext user content.
 - [ ] Logs are JSON; no raw transcripts; PII sanitized.
-- [ ] HTTP timeouts set on every outbound client (Deepgram, OpenAI,
+- [ ] HTTP timeouts set on every outbound client (Deepgram, Gemini,
       Pinecone, webhooks).
 - [ ] No `requests.*`, `time.sleep`, `Thread().start().join()` in
       async code (`scripts/lint_async_blockers.py` clean).
@@ -63,7 +63,7 @@ Print this. Tick boxes only when you've personally verified.
       (if you have a marketing site).
 - [ ] DPA template ready for B2B prospects.
 - [ ] GDPR Article 30 (Records of Processing) doc filled.
-- [ ] Subprocessor list maintained (OpenAI, Deepgram, Pinecone,
+- [ ] Subprocessor list maintained (Google Gemini, Deepgram, Pinecone,
       Firebase, Stripe, Sentry, etc.) and linked from privacy.
 - [ ] If under-13 users are possible: COPPA-compliant flow and a
       hard age gate.

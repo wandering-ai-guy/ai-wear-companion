@@ -53,12 +53,12 @@ We can split the system into **four planes**:
 │                                                                          │
 │  ┌────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐   │
 │  │  STT       │  │  Diarizer   │  │  VAD        │  │  LLM            │   │
-│  │  Deepgram  │  │  pyannote   │  │  pyannote   │  │  OpenAI/Anthr.  │   │
+│  │  Deepgram  │  │  pyannote   │  │  pyannote   │  │  Gemini 2.5     │   │
 │  └────────────┘  └─────────────┘  └─────────────┘  └─────────────────┘   │
 │                                                                          │
 │  ┌────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐   │
 │  │ Embedding  │  │ Vector DB   │  │ Search      │  │ Translation     │   │
-│  │ (OpenAI)   │  │ Pinecone    │  │ Typesense   │  │ Google Translate│   │
+│  │ (Gemini)   │  │ Pinecone    │  │ Typesense   │  │ Google Translate│   │
 │  └────────────┘  └─────────────┘  └─────────────┘  └─────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────┘
              │                                         │
@@ -116,8 +116,8 @@ These are mostly *third-party services* called from the API plane, but you
 will write a thin wrapper around each one so you can swap providers later.
 
 - **STT (Speech-To-Text):** Deepgram is the default because it has the
-  lowest live-streaming latency. AssemblyAI and OpenAI Whisper are
-  alternatives.
+  lowest live-streaming latency. AssemblyAI and Google's Cloud
+  Speech-to-Text are alternatives.
 - **Diarizer:** Splits "who is talking" into separate speaker IDs. We use
   the open-source `pyannote/speaker-diarization` model, hosted as its own
   microservice on a GPU. For v1 you can skip this and pretend everyone is
@@ -125,10 +125,14 @@ will write a thin wrapper around each one so you can swap providers later.
 - **VAD (Voice Activity Detection):** Says "yes there is speech in this
   100ms chunk" or "no, this is silence." We use it to gate the STT (don't
   pay for transcribing silence) and to detect end-of-conversation.
-- **LLM:** OpenAI's GPT-4o-mini and o4-mini, or Anthropic's Claude
-  Sonnet/Haiku, or Google Gemini. We use a wrapper that lets us swap.
-- **Embeddings:** Turn each conversation/memory into a vector. OpenAI's
-  `text-embedding-3-small` (1536 dims) is the default.
+- **LLM:** **Google Gemini** — specifically `gemini-2.5-flash` for fast,
+  cheap calls (post-processing, memory extraction, tool dispatch) and
+  `gemini-2.5-pro` for harder reasoning (chat answers). We use a thin
+  wrapper so you can swap to Anthropic Claude or another provider later
+  without rewriting routers.
+- **Embeddings:** Turn each conversation/memory into a vector. Google's
+  `text-embedding-004` (**768 dims**) is the default. Cheap, fast, and
+  in the same vendor as the LLM, which simplifies billing alerts.
 - **Vector DB:** Pinecone serverless. (Alternatives: Qdrant, Weaviate.)
 - **Search:** Typesense for full-text search of transcripts.
 - **Translation:** Google Cloud Translate (optional, multi-language users).

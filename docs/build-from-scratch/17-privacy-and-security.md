@@ -100,8 +100,15 @@ conversations, **only the decrypted text** crosses the LLM boundary
 - Set `LANGSMITH_TRACING=false` unless you trust LangSmith with
   user content. If you enable it, document that in your privacy
   policy.
-- Set OpenAI organization-level **data sharing OFF** (Console →
-  Privacy). Without this, OpenAI may use your prompts to train.
+- For **Gemini**, billed-API usage (any request made with a GCP-billed
+  API key or a Vertex AI service account) is **not** used to improve
+  Google's products. The free tier in Google AI Studio *is*; never put
+  a free-tier key into a production deployment. Verify your project
+  has billing enabled and the Gemini API call shows up under "Generative
+  Language API" in the Cloud Billing report.
+- Same rule for any fallback provider you wire up: turn off training
+  on your prompts (OpenAI → Console → Privacy; Anthropic → Console
+  → Privacy settings; etc.).
 
 ## 5. Sanitize all logs
 

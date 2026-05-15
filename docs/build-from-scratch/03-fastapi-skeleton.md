@@ -58,7 +58,7 @@ GOOGLE_APPLICATION_CREDENTIALS=
 ADMIN_KEY=
 
 # To be filled in later parts.
-OPENAI_API_KEY=
+GEMINI_API_KEY=
 DEEPGRAM_API_KEY=
 PINECONE_API_KEY=
 PINECONE_INDEX_NAME=
@@ -116,7 +116,7 @@ class Settings(BaseSettings):
 
     admin_key: str = ""
 
-    openai_api_key: str = ""
+    gemini_api_key: str = ""
     deepgram_api_key: str = ""
     pinecone_api_key: str = ""
     pinecone_index_name: str = ""

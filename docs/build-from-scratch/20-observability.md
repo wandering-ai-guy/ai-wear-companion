@@ -106,7 +106,8 @@ Increment them at the right places:
 
 ```python
 LISTEN_BYTES.labels(codec=fmt.codec).inc(len(chunk))
-LLM_TOKENS.labels(model="gpt-4o-mini", kind="in").inc(rsp.usage.prompt_tokens)
+LLM_TOKENS.labels(model="gemini-2.5-flash", kind="in").inc(rsp.usage_metadata.prompt_token_count)
+LLM_TOKENS.labels(model="gemini-2.5-flash", kind="out").inc(rsp.usage_metadata.candidates_token_count)
 ```
 
 ## 4. Sentry: errors and a crude trace
@@ -152,9 +153,29 @@ Append to `requirements.txt`:
 langsmith==0.4.37
 ```
 
-`langchain` and `openai` clients pick the env var up automatically;
-nothing else to change. You'll see every chat completion in the
-LangSmith UI with prompt + response + latency + token cost.
+The Gemini Python SDK does **not** auto-export to LangSmith. The
+simplest wiring is a small wrapper around `gemini_client()` that
+opens a LangSmith run before each call:
+
+```python
+# in backend/utils/llm/tracing.py
+import os
+from contextlib import asynccontextmanager
+from typing import Any
+
+from langsmith import traceable
+
+
+@traceable(run_type="llm", name="gemini.generate_content")
+async def traced_generate(model: str, contents: Any, config: Any, client):
+    return await client.aio.models.generate_content(
+        model=model, contents=contents, config=config,
+    )
+```
+
+Then in `post_process.py` / `orchestrator.py`, call
+`traced_generate(...)` instead of the raw client call. You'll see
+every Gemini call in LangSmith with prompt + response + latency.
 
 Disable in dev unless you have a reason — your dev prompts often
 contain test PII you don't want in a third-party UI.

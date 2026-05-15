@@ -61,7 +61,7 @@ page; **enable two-factor authentication on every account.**
 |---------|---------------|------------|---------|
 | **Google Cloud Platform** | Firebase Auth, Firestore, Cloud Storage, Cloud Run | $300 trial credit | https://cloud.google.com/ |
 | **Firebase** (same account as GCP) | Auth UI, push notifications, console | included with GCP | https://console.firebase.google.com/ |
-| **OpenAI** | LLM + embeddings | pay-as-you-go, $5 minimum | https://platform.openai.com/ |
+| **Google AI Studio (Gemini API)** | LLM + embeddings | generous free tier, pay-as-you-go | https://aistudio.google.com/app/apikey |
 | **Deepgram** | Speech-to-text | $200 starter credit | https://console.deepgram.com/signup |
 | **Pinecone** | Vector database | 1 starter index free | https://app.pinecone.io/ |
 | **Upstash** | Redis (serverless) | 10K commands/day free | https://console.upstash.com/ |
@@ -82,6 +82,7 @@ page; **enable two-factor authentication on every account.**
 ### Optional (you'll add them in later parts if you want the feature)
 
 - **Anthropic** (Claude) — alternative LLM, https://console.anthropic.com/
+- **OpenAI** — alternative LLM, https://platform.openai.com/
 - **Modal** — serverless GPUs for VAD/diarization, https://modal.com/
 - **Hume AI** — emotion detection, https://hume.ai/
 - **ElevenLabs** — TTS, https://elevenlabs.io/
@@ -103,7 +104,7 @@ GCP_PROJECT_NUMBER=
 FIREBASE_API_KEY=
 FIREBASE_AUTH_DOMAIN=
 GOOGLE_APPLICATION_CREDENTIALS=  # path to service-account.json
-OPENAI_API_KEY=
+GEMINI_API_KEY=                 # from Google AI Studio
 DEEPGRAM_API_KEY=
 PINECONE_API_KEY=
 PINECONE_INDEX_NAME=
@@ -125,6 +126,7 @@ TWILIO_AUTH_TOKEN=
 
 # === Optional ===
 ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
 HUGGINGFACE_TOKEN=
 ELEVENLABS_API_KEY=
 PERPLEXITY_API_KEY=
@@ -146,8 +148,10 @@ $8,000."
 - **GCP:** Billing → Budgets & alerts → New budget. Set a $50/month cap
   with email alerts at 50%, 90%, and 100%. Add a second alert at $200
   for "things are clearly very wrong."
-- **OpenAI:** Settings → Billing → Usage limits. Hard limit $50/month
-  while you're developing.
+- **Google AI Studio (Gemini):** the Gemini API is billed through your
+  GCP project. Make sure the same $50/month GCP budget alert above
+  covers it, and confirm the "Generative Language API" line item shows
+  up under Billing → Reports once you've made your first call.
 - **Deepgram:** Console → Billing → Set spend cap.
 - **Pinecone:** stays free on the starter plan; just don't add a
   second index by accident.
@@ -172,6 +176,7 @@ needs it, you're not blocked.
    - Cloud Firestore API
    - Cloud Storage API
    - Identity Toolkit API (Firebase Auth)
+   - **Generative Language API** (Gemini)
    - Cloud Build API (you'll need this in Part 19)
    - Cloud Run Admin API (Part 19)
    - Secret Manager API (Part 19)
@@ -211,7 +216,7 @@ the Pinecone index, etc., on demand in their respective parts.
 - [ ] A GCP project + Firebase initialized.
 - [ ] Firestore in production mode.
 - [ ] Email + Google + Apple sign-in enabled in Firebase Auth.
-- [ ] Accounts on OpenAI, Deepgram, Pinecone, Upstash, GitHub, Stripe,
+- [ ] Accounts on Google AI Studio (Gemini), Deepgram, Pinecone, Upstash, GitHub, Stripe,
   Sentry — all with 2FA + billing caps.
 - [ ] An empty private GitHub repo with `.gitignore` and `LICENSE`.
 - [ ] A "secrets" doc with empty rows for every key you'll fill in later.
